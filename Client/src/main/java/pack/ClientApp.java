@@ -9,8 +9,6 @@ import javafx.geometry.Insets;
 import javafx.scene.Group;
 import javafx.scene.Scene;
 import javafx.scene.control.Label;
-import javafx.scene.image.Image;
-import javafx.scene.image.ImageView;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.*;
@@ -24,9 +22,6 @@ import javafx.stage.Stage;
 import javafx.util.Duration;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 
 public class ClientApp extends Application {
@@ -34,12 +29,16 @@ public class ClientApp extends Application {
     Group barPlayer1 = new Group();
     static Rectangle[] bar2 = new Rectangle[3];
     Group barPlayer2 = new Group();
+    
+    
     private static int positionPlayer;
     private static Client client;
-
-    private static final int speed1P = 3;
-    private static final int speed2P = 3;
-    private static final int jumpLength = 12;
+    private static final int SPEED_1_P = 3;
+    private static final int SPEED_2_P = 3;
+    private static final int JUMP_LENGTH = 21;
+    private static final Color FIRST_COLOR = Color.YELLOW;
+    private static final Color SECOND_COLOR = Color.ORANGE;
+    private static final double[] COORDS = new double[]{100.0, 260.0,400.0,260.0};
 
 
     @Override
@@ -61,7 +60,7 @@ public class ClientApp extends Application {
             }
         }
 
-        stack.setStyle("-fx-background-color: #67C8FF;" + "-fx-border-color: grey;");
+        stack.setStyle("-fx-background-color: #03d32c;" + "-fx-border-color: grey;");
         stack.setPadding(new Insets(2));
         stack.setMinSize(board.getMinWidth(), board.getMinHeight());
 
@@ -87,30 +86,17 @@ public class ClientApp extends Application {
 
         stack.getChildren().addAll(board, game);
 
-        BorderPane head = new BorderPane();
-        InputStream is = Files.newInputStream(Paths.get("Client/src/main/java/resources/TronLogo.jpg"));
-        Image logo = new Image(is, 200, 100, true, true);
-        ImageView iv = new ImageView(logo);
-
         VBox player1info = new VBox(5);
 
         VBox player2info = new VBox(5);
 
-        head.setStyle("-fx-background-color: rgba(0,0,0,1);");
-        head.setLeft(player1info);
-        head.setCenter(iv);
-        head.setRight(player2info);
-        head.setPadding(new Insets(20));
-
         BorderPane pane = new BorderPane();
-        pane.setStyle("-fx-background-color: blue;");
-        pane.setTop(head);
+        pane.setStyle("-fx-background-color: #03d32c;");
         pane.setCenter(stack);
 
         Scene scene = new Scene(pane);
         scene.setOnKeyPressed(game::processKeyPress);
         positionPlayer = client.getPositionPlayer();
-        stage.setTitle("Tron");
         stage.setScene(scene);
         stage.show();
     }
@@ -119,19 +105,17 @@ public class ClientApp extends Application {
         public ArrayList<Line> linesP1 = new ArrayList<Line>();
         public ArrayList<Line> linesP2 = new ArrayList<Line>();
 
-        public boolean crash1 = false;
-        public boolean crash2 = false;
-
-        public int player1wins = 0;
+        private int player1wins = 0;
         private int player2wins = 0;
 
         private final Board game;
         private Circle p1, p2;
         private double p1x, p1y, p2x, p2y;
         private Line tailP1, tailP2;
-
+        private boolean skipNext = false;
         private final Timeline animation;
         private boolean isPaused = true;
+        private boolean playGame = false;
 
         Label press;
 
@@ -143,17 +127,14 @@ public class ClientApp extends Application {
             String winner = "";
             winnerText = new Label(winner);
 
-            p1x = 100.0;
-            p1y = 260.0;
-            p2x = 400.0;
-            p2y = 260.0;
+            coordsToStart();
 
 
             winnerText.setFont(new Font("Arial", 20));
 
             game = new Board();
             reset();
-            press.setStyle("-fx-background-color: black;" + "-fx-border-color: cyan;" + "-fx-text-fill: white;");
+            press.setStyle("-fx-background-color: black;" + "-fx-background-color: #03d32c;" + "-fx-text-fill: white;");
             press.layoutXProperty().bind(this.widthProperty().subtract(press.widthProperty()).divide(2));
             press.layoutYProperty().bind(this.heightProperty().subtract(press.heightProperty()).divide(2));
             press.setPadding(new Insets(5));
@@ -176,6 +157,13 @@ public class ClientApp extends Application {
             animation.setCycleCount(Timeline.INDEFINITE);
             animation.pause();
         }
+        
+        private void coordsToStart(){
+            p1x = COORDS[0];
+            p1y = COORDS[1];
+            p2x = COORDS[2];
+            p2y = COORDS[3];
+        }
 
         public void play() {
             animation.play();
@@ -184,138 +172,168 @@ public class ClientApp extends Application {
 
         public void pause() {
             animation.pause();
+            isPaused = true;
+        }
+
+        public void pauseManually() {
+            animation.pause();
             winnerText.setText("PAUSE");
             isPaused = true;
             winnerText.setVisible(true);
+            client.pause();
         }
-
-        private boolean playGame = false;
 
         protected void movePlayer() throws IOException {
             String s = client.read();
-            if (s.equals("pause")) {
+            if ("pause".equals(s)) {
+                System.out.println(positionPlayer + "paused");
                 pause();
                 playGame = false;
             }
-            if (playGame) {
-                String[] coordinate;
-                String cor;
-                if (positionPlayer == 1) {
-                    if (game.getPlayer(positionPlayer).getDir().equals("l")) {
-                        p1x -= speed1P;
-                    } else if (game.getPlayer(positionPlayer).getDir().equals("u")) {
-                        p1y -= speed1P;
-                    } else if (game.getPlayer(positionPlayer).getDir().equals("r")) {
-                        p1x += speed1P;
-                    } else if (game.getPlayer(positionPlayer).getDir().equals("d")) {
-                        p1y += speed1P;
+            if (client.isTie()) {
+                endGame(4);
+            } else{
+                if (playGame) {
+                    if (client.isJump()) {
+                        skipNext = true;
+                    } else {
+                        String[] coordinate;
+                        String cor;
+                        if (positionPlayer == 1) {
+                            if (game.getPlayer(positionPlayer).getDir().equals("l")) {
+                                p1x -= SPEED_1_P;
+                            } else if (game.getPlayer(positionPlayer).getDir().equals("u")) {
+                                p1y -= SPEED_1_P;
+                            } else if (game.getPlayer(positionPlayer).getDir().equals("r")) {
+                                p1x += SPEED_1_P;
+                            } else if (game.getPlayer(positionPlayer).getDir().equals("d")) {
+                                p1y += SPEED_1_P;
+                            }
+                            client.send(p1x, p1y);
+                            cor = client.read();
+                            if (!cor.equals("null") && !cor.equals("play")) {
+                                coordinate = client.read().split(",");
+                                p2x = Double.parseDouble(coordinate[0]);
+                                p2y = Double.parseDouble(coordinate[1]);
+                            }
+                        } else {
+                            if (game.getPlayer(positionPlayer).getDir().equals("l")) {
+                                p2x -= SPEED_2_P;
+                            } else if (game.getPlayer(positionPlayer).getDir().equals("u")) {
+                                p2y -= SPEED_2_P;
+                            } else if (game.getPlayer(positionPlayer).getDir().equals("r")) {
+                                p2x += SPEED_2_P;
+                            } else if (game.getPlayer(positionPlayer).getDir().equals("d")) {
+                                p2y += SPEED_2_P;
+                            }
+                            client.send(p2x, p2y);
+                            cor = client.read();
+                            if (!cor.equals("null") && !cor.equals("play")) {
+                                coordinate = client.read().split(",");
+                                p1x = Double.parseDouble(coordinate[0]);
+                                p1y = Double.parseDouble(coordinate[1]);
+                            }
+                        }
                     }
-                    client.send(p1x, p1y);
-                    cor = client.read();
-                    if (!cor.equals("null") && !cor.equals("play")) {
-                        coordinate = client.read().split(",");
-                        p2x = Double.parseDouble(coordinate[0]);
-                        p2y = Double.parseDouble(coordinate[1]);
+
+                    if (skipNext) {
+
+                        if (positionPlayer == 1 && distanceFromPrevious(linesP2, p2x, p2y)) {
+                            linesP2.add(tailP2);
+                            tailP2 = tail(
+                                    p2x,
+                                    p2y,
+                                    p2x, p2y, 2);
+                            getChildren().add(tailP2);
+                            skipNext = false;
+                        }
+                        if (positionPlayer == 2 && distanceFromPrevious(linesP1, p1x, p1y)) {
+                            linesP1.add(tailP1);
+                            tailP1 = tail(
+                                    p1x,
+                                    p1y,
+                                    p1x, p1y, 1);
+                            getChildren().add(tailP1);
+                            skipNext = false;
+                        }
                     }
-                } else {
-                    if (game.getPlayer(positionPlayer).getDir().equals("l")) {
-                        p2x -= speed2P;
-                    } else if (game.getPlayer(positionPlayer).getDir().equals("u")) {
-                        p2y -= speed2P;
-                    } else if (game.getPlayer(positionPlayer).getDir().equals("r")) {
-                        p2x += speed2P;
-                    } else if (game.getPlayer(positionPlayer).getDir().equals("d")) {
-                        p2y += speed2P;
+
+
+                    linesP1.add(tailP1);
+                    tailP1 = tail(
+                            linesP1.get(linesP1.size() - 1).endXProperty().doubleValue(),
+                            linesP1.get(linesP1.size() - 1).endYProperty().doubleValue(),
+                            p1x, p1y, 1);
+                    p1.setCenterX(p1x);
+                    p1.setCenterY(p1y);
+                    getChildren().add(tailP1);
+
+                    linesP2.add(tailP2);
+                    tailP2 = tail(
+                            linesP2.get(linesP2.size() - 1).endXProperty().doubleValue(),
+                            linesP2.get(linesP2.size() - 1).endYProperty().doubleValue(),
+                            p2x, p2y, 2);
+                    p2.setCenterX(p2x);
+                    p2.setCenterY(p2y);
+                    getChildren().add(tailP2);
+
+
+                    Point point1 = new Point(p1x, p1y);
+                    Point point2 = new Point(p2x, p2y);
+
+                    if (checkTie(point1, point2)) {
+                        endGame(3);
+                    } else {
+                        if (checkCrash1(point1)) {
+                            endGame(1);
+                        }
+                        if (checkCrash1(point2)) {
+                            endGame(2);
+                        }
+
+
+                        if (check(linesP1, p1)) {
+                            endGame(1);
+                        }
+                        if (check(linesP2, p2)) {
+                            endGame(2);
+                        }
+
+
+                        if (check2(linesP2, p1)) {
+                            endGame(1);
+                        }
+                        if (check2(linesP1, p2)) {
+                            endGame(2);
+                        }
                     }
-                    client.send(p2x, p2y);
-                    cor = client.read();
-                    if (!cor.equals("null") && !cor.equals("play")) {
-                        coordinate = client.read().split(",");
-                        p1x = Double.parseDouble(coordinate[0]);
-                        p1y = Double.parseDouble(coordinate[1]);
-                    }
+                } else if ("play".equals(s)) {
+                    playGame = true;
+                    isPaused = false;
                 }
-
-                linesP1.add(tailP1);
-                tailP1 = tail(
-                        linesP1.get(linesP1.size() - 1).endXProperty().doubleValue(),
-                        linesP1.get(linesP1.size() - 1).endYProperty().doubleValue(),
-                        p1x, p1y, 1);
-                p1.setCenterX(p1x);
-                p1.setCenterY(p1y);
-                getChildren().add(tailP1);
-
-                linesP2.add(tailP2);
-                tailP2 = tail(
-                        linesP2.get(linesP2.size() - 1).endXProperty().doubleValue(),
-                        linesP2.get(linesP2.size() - 1).endYProperty().doubleValue(),
-                        p2x, p2y, 2);
-                p2.setCenterX(p2x);
-                p2.setCenterY(p2y);
-                getChildren().add(tailP2);
-
-                tailP1.setEndX(p1x);
-                tailP1.setEndY(p1y);
-                tailP2.setEndX(p2x);
-                tailP2.setEndY(p2y);
-
-
-                Point point1 = new Point(p1x, p1y);
-                Point point2 = new Point(p2x, p2y);
-
-                crash1 = checkCrash1(point1);
-                if (crash1) {
-                    crash(1);
-                }
-                crash2 = checkCrash1(point2);
-                if (crash2) {
-                    crash(2);
-                }
-
-                crash2 = check(linesP2, p2);
-                crash1 = check(linesP1, p1);
-
-                if (crash1) {
-                    crash(1);
-                }
-                if (crash2) {
-                    crash(2);
-                }
-
-                crash1 = check2(linesP2, p1);
-                crash2 = check2(linesP1, p2);
-                if (crash1) {
-                    crash(1);
-                }
-                if (crash2) {
-                    crash(2);
-                }
-            } else if (s.equals("play")) {
-                playGame = true;
-                isPaused = false;
-            }
+        }
         }
 
         protected void jumpPlayer() {
             if (positionPlayer == 1) {
                 if (game.getPlayer(positionPlayer).getDir().equals("l")) {
-                    p1x -= jumpLength;
+                    p1x -= JUMP_LENGTH;
                 } else if (game.getPlayer(positionPlayer).getDir().equals("u")) {
-                    p1y -= jumpLength;
+                    p1y -= JUMP_LENGTH;
                 } else if (game.getPlayer(positionPlayer).getDir().equals("r")) {
-                    p1x += jumpLength;
+                    p1x += JUMP_LENGTH;
                 } else if (game.getPlayer(positionPlayer).getDir().equals("d")) {
-                    p1y += jumpLength;
+                    p1y += JUMP_LENGTH;
                 }
             } else {
                 if (game.getPlayer(positionPlayer).getDir().equals("l")) {
-                    p2x -= jumpLength;
+                    p2x -= JUMP_LENGTH;
                 } else if (game.getPlayer(positionPlayer).getDir().equals("u")) {
-                    p2y -= jumpLength;
+                    p2y -= JUMP_LENGTH;
                 } else if (game.getPlayer(positionPlayer).getDir().equals("r")) {
-                    p2x += jumpLength;
+                    p2x += JUMP_LENGTH;
                 } else if (game.getPlayer(positionPlayer).getDir().equals("d")) {
-                    p2y += jumpLength;
+                    p2y += JUMP_LENGTH;
                 }
             }
             linesP1.add(tailP1);
@@ -330,6 +348,7 @@ public class ClientApp extends Application {
                     p2y,
                     p2x, p2y, 2);
             getChildren().add(tailP2);
+            client.sendJump();
         }
 
         public void processKeyPress(KeyEvent e) {
@@ -342,6 +361,8 @@ public class ClientApp extends Application {
                 winnerText.setVisible(false);
             } else if (e.getCode() == KeyCode.SPACE) {
                 jumpPlayer();
+            } else if (e.getCode() == KeyCode.P) {
+                pauseManually();
             } else if (positionPlayer == 1) {
                 if (e.getCode() == KeyCode.W && !game.getPlayer(positionPlayer).getDir().equals("d")) {
                     game.getPlayer(1).setDir("u");
@@ -370,48 +391,41 @@ public class ClientApp extends Application {
             l.setStrokeWidth(0.5);
             l.setStrokeLineCap(StrokeLineCap.ROUND);
             if (player == 1)
-                l.setStroke(Color.CYAN);
+                l.setStroke(FIRST_COLOR);
             else
-                l.setStroke(Color.HOTPINK);
+                l.setStroke(SECOND_COLOR);
             return l;
         }
-        public void crash(int i) {
+
+        public void endGame(int i) {
             reset();
             isPaused = true;
             client.pause();
             pause();
             playGame = false;
+
             if (i == 1) {
                 winnerText.setText("PLAYER 2 WINS");
-                bar2[player2wins].setFill(Color.HOTPINK);
+                winnerText.setTextFill(SECOND_COLOR);
+//                bar2[player2wins].setFill(SECOND_COLOR);
                 player2wins++;
-                win();
+                reset();
             } else if (i == 2) {
                 winnerText.setText("PLAYER 1 WINS");
-                bar1[player1wins].setFill(Color.CYAN);
+                winnerText.setTextFill(FIRST_COLOR);
                 player1wins++;
-                win();
+                reset();
             } else if (i == 3) {
                 winnerText.setText("TIE");
+                System.out.println("own");
+                client.sendTie();
+                reset();
             }
-        }
-
-        public void win() {
-            reset();
-            p1x = 100.0;
-            p1y = 260.0;
-            p2x = 400.0;
-            p2y = 260.0;
-            if (player1wins == 3) {
-                winnerText.setText("CONGRATULATIONS PLAYER 1! YOU WON!");
-                player1wins = 0;
-                player2wins = 0;
-            } else if (player2wins == 3) {
-                winnerText.setText("CONGRATULATIONS PLAYER 2! YOU WON!");
-                player2wins = 0;
-                player1wins = 0;
+            else if (i == 4) {
+                winnerText.setText("TIE");
+                System.out.println("checked");
+                reset();
             }
-
             winnerText.setVisible(true);
         }
 
@@ -420,10 +434,7 @@ public class ClientApp extends Application {
             game.getPlayer(1).setDir("r");
             game.getPlayer(2).setDir("l");
 
-            p1x = 100;
-            p1y = 260;
-            p2x = 400;
-            p2y = 260;
+            coordsToStart();
 
             if (positionPlayer == 1) {
                 client.send(p2x, p2y);
@@ -435,23 +446,44 @@ public class ClientApp extends Application {
             tailP2 = new Line(p2x, p2y, p2x, p2y);
 
             tailP1.setStrokeWidth(0.5);
-            tailP1.setStroke(Color.CYAN);
+            tailP1.setStroke(FIRST_COLOR);
             tailP1.setStrokeLineCap(StrokeLineCap.ROUND);
             tailP2.setStrokeWidth(0.5);
-            tailP2.setStroke(Color.HOTPINK);
+            tailP2.setStroke(SECOND_COLOR);
             tailP2.setStrokeLineCap(StrokeLineCap.ROUND);
 
             p1 = new Circle(p1x, p1y, 2.5);
             p2 = new Circle(p2x, p2y, 2.5);
-            p1.setFill(Color.CYAN);
-            p2.setFill(Color.HOTPINK);
+            p1.setFill(FIRST_COLOR);
+            p2.setFill(SECOND_COLOR);
 
-            crash1 = false;
-            crash2 = false;
             linesP1.clear();
             linesP2.clear();
 
             getChildren().addAll(p1, p2, tailP1, tailP2, press, winnerText);
+
+            player2wins = 0;
+            player1wins = 0;
+        }
+
+        public boolean checkTie(Point p1, Point p2){
+            boolean a1=false;
+            boolean a2=false;
+            for (int i = (int) p1.getX()-2; i < p1.getX()+2; i++) {
+                for (int j = (int) p2.getX()-2; j < p2.getX()+2; j++) {
+                    if(i==j){
+                        a1=true;
+                    }
+                }
+            }
+            for (int i = (int) p1.getY()-2; i < p1.getY()+2; i++) {
+                for (int j = (int) p2.getY()-2; j < p2.getY()+2; j++) {
+                    if(i==j){
+                        a2=true;
+                    }
+                }
+            }
+            return a1&&a2;
         }
 
         public boolean check(ArrayList<Line> list, Circle l) {
@@ -481,5 +513,10 @@ public class ClientApp extends Application {
 
     public static void main(String[] args) {
         launch();
+    }
+
+    private static boolean distanceFromPrevious(ArrayList<Line> list, double x, double y){
+        return Math.abs(list.get(list.size() -1).endXProperty().doubleValue() - x) > 4 ||
+                Math.abs(list.get(list.size() -1).endYProperty().doubleValue() - y) > 4;
     }
 }

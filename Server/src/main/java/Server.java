@@ -15,7 +15,7 @@ class Server extends Thread {
     public void printStory(OutputStream writer, int size) {
         try {
             Packet packet = Packet.create(2);
-            packet.setValue(1, (size+1));
+            packet.setValue(1, (size + 1));
             writer.write(packet.toByteArray());
             writer.flush();
         } catch (IOException ignored) {
@@ -38,20 +38,29 @@ class Server extends Thread {
                 while (true) {
                     byte[] data = readInput(in);
                     Packet packet = Packet.parse(data);
-                    if (packet.getType()==1) {
-                        word = packet.getValue(1, String.class);
-                        if (word.equals("pause")) {
-                            for (Server vr : ServerApp.serverList) {
-                                vr.send(word);
+                    switch (packet.getType()) {
+                        case 1:
+                            word = packet.getValue(1, String.class);
+                            if (word.equals("pause")) {
+                                for (Server vr : ServerApp.serverList) {
+                                    vr.send(word);
+                                }
+                            } else {
+                                for (Server vr : ServerApp.serverList) {
+                                    if (this == vr) {
+                                        continue;
+                                    }
+                                    vr.send(word);
+                                }
                             }
-                        } else {
+                            break;
+                        case 3:
                             for (Server vr : ServerApp.serverList) {
                                 if (this == vr) {
                                     continue;
                                 }
-                                vr.send(word);
+                                vr.sendJump();
                             }
-                        }
                     }
                 }
             } catch (NullPointerException ignored) {
@@ -67,6 +76,15 @@ class Server extends Thread {
         try {
             Packet packet = Packet.create(1);
             packet.setValue(1, msg);
+            out.write(packet.toByteArray());
+            out.flush();
+        } catch (IOException ignored) {
+        }
+    }
+
+    private void sendJump(){
+        try {
+            Packet packet = Packet.create(3);
             out.write(packet.toByteArray());
             out.flush();
         } catch (IOException ignored) {

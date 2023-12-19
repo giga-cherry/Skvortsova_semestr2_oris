@@ -11,6 +11,9 @@ class Client {
     private InputStream in;
     private OutputStream out;
     private String str;
+
+    private boolean isJump = false;
+    private boolean isTie = false;
     private String sendMessage = null;
 
 
@@ -62,12 +65,23 @@ class Client {
     private int type;
 
     public synchronized void pause() {
+        sendMessage="pause";
         needToPause = true;
     }
 
     public synchronized void unpause() {
         needToPause = false;
         this.notifyAll();
+    }
+
+    public synchronized void sendJump() {
+        type = 3;
+        needToSend = true;
+    }
+
+    public synchronized void sendTie() {
+        type = 4;
+        needToSend = true;
     }
 
     public synchronized void send(double x, double y) {
@@ -102,7 +116,12 @@ class Client {
                         case (2):
                             positionPlayer = packet.getValue(1, Integer.class);
                             break;
-
+                        case (3):
+                            isJump = true;
+                            break;
+                        case(4):
+                            isTie=true;
+                            break;
                     }
                 }
             } catch (IOException e) {
@@ -113,6 +132,22 @@ class Client {
 
     public synchronized String read() {
         return str;
+    }
+
+    public synchronized boolean isJump(){
+        if (isJump){
+            isJump = false;
+            return true;
+        }
+        return false;
+    }
+
+    public synchronized boolean isTie(){
+        if (isTie){
+            isTie = false;
+            return true;
+        }
+        return false;
     }
 
     public int getPositionPlayer() {
